@@ -164,6 +164,12 @@ object Router {
 
     /** Applies the saved rules. Safe to call repeatedly. */
     fun applyAll(ctx: Context): Report {
+        val result = doApply(ctx)
+        Prefs.setLastLog(ctx, result.toString())
+        return result
+    }
+
+    private fun doApply(ctx: Context): Report {
         val r = Report()
         if (!binderAlive()) {
             r.fail("Shizuku غير شغّال")
@@ -290,6 +296,38 @@ object Router {
             allStrategies().forEach { sb.appendLine("id=${strategyId(it)} name=${strategyName(it)}") }
         } catch (t: Throwable) {
             sb.appendLine("error: ${unwrap(t).javaClass.simpleName}: ${unwrap(t).message}")
+        }
+        sb.appendLine("== الإعداد الحالي: المفتاح=${if (Prefs.toHearing(ctx)) "السماعة" else "الجوال"} ==")
+        sb.appendLine("== آخر تطبيق للقواعد ==")
+        sb.appendLine(Prefs.lastLog(ctx).ifEmpty { "(لم يُطبَّق بعد)" })
+        sb.appendLine("== الجهاز المفضّل المثبّت حالياً لكل مسار ==")
+        try {
+            val svc = audioService()
+            val iface = Class.forName("android.media.IAudioService")
+            val get = iface.getMethod("getPreferredDevicesForStrategy", Int::class.javaPrimitiveType)
+            for (s in allStrategies()) {
+                val id = strategyId(s)
+                val devs = get.invoke(svc, id) as List<*>
+                sb.appendLine("${strategyName(s)}($id): " + if (devs.isEmpty()) "لا شيء" else devs.joinToString { it.toString() })
+            }
+        } catch (t: Throwable) {
+            sb.appendLine("error: ${unwrap(t).javaClass.simpleName}: ${unwrap(t).message}")
+        }
+        sb.appendLine("== المخرج الفعلي الذي يختاره النظام لكل نوع صوت ==")
+        try {
+            val am = ctx.getSystemService(AudioManager::class.java)
+            listOf(
+                "وسائط" to AudioAttributes.USAGE_MEDIA,
+                "مكالمات" to AudioAttributes.USAGE_VOICE_COMMUNICATION,
+                "رنين" to AudioAttributes.USAGE_NOTIFICATION_RINGTONE,
+                "منبه" to AudioAttributes.USAGE_ALARM,
+                "إشعار" to AudioAttributes.USAGE_NOTIFICATION
+            ).forEach { (name, usage) ->
+                val devs = am.getAudioDevicesForAttributes(AudioAttributes.Builder().setUsage(usage).build())
+                sb.appendLine("$name: " + if (devs.isEmpty()) "لا شيء" else devs.joinToString { "type=${it.type}" })
+            }
+        } catch (t: Throwable) {
+            sb.appendLine("error: ${t.javaClass.simpleName}: ${t.message}")
         }
         sb.appendLine("== IAudioService ==")
         sb.appendLine(listPreferredMethods())

@@ -11,4 +11,8 @@ object Prefs {
 
     fun toHearing(c: Context) = sp(c).getBoolean("to_hearing", true)
     fun setToHearing(c: Context, v: Boolean) = sp(c).edit().putBoolean("to_hearing", v).apply()
+
+    /** The last apply result, so the diagnostics report can include it. */
+    fun lastLog(c: Context): String = sp(c).getString("last_log", "") ?: ""
+    fun setLastLog(c: Context, v: String) = sp(c).edit().putString("last_log", v).apply()
 }
