@@ -158,6 +158,17 @@ class MainActivity : Activity() {
 
         updateLabels()
 
+        val version = try {
+            packageManager.getPackageInfo(packageName, 0).versionName
+        } catch (_: Throwable) {
+            ""
+        }
+        root.addView(
+            Ui.text(this, "موجّه الصوت · الإصدار $version", 12f, color = Ui.MUTED).apply {
+                setPadding(0, Ui.dp(this@MainActivity, 16), 0, 0)
+            }
+        )
+
         Shizuku.addBinderReceivedListenerSticky(binderListener)
         Shizuku.addBinderDeadListener(deadListener)
         Shizuku.addRequestPermissionResultListener(permListener)

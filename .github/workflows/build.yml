@@ -3,7 +3,11 @@ name: Build APK
 on:
   push:
     branches: [main]
+    tags: ["v*"]
   workflow_dispatch:
+
+permissions:
+  contents: write
 
 jobs:
   build:
@@ -20,10 +24,27 @@ jobs:
         with:
           gradle-version: "8.9"
 
-      - name: Build debug APK
+      - name: Build debug APK (every push)
+        if: ${{ !startsWith(github.ref, 'refs/tags/v') }}
         run: gradle assembleDebug --no-daemon --stacktrace
 
+      - name: Build release APK (version tags)
+        if: startsWith(github.ref, 'refs/tags/v')
+        run: gradle assembleRelease --no-daemon --stacktrace
+
       - uses: actions/upload-artifact@v4
+        if: ${{ !startsWith(github.ref, 'refs/tags/v') }}
         with:
           name: audio-router-apk
           path: app/build/outputs/apk/debug/app-debug.apk
+
+      - name: Publish GitHub Release
+        if: startsWith(github.ref, 'refs/tags/v')
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          APK="hearing-aid-audio-router-${{ github.ref_name }}.apk"
+          cp app/build/outputs/apk/release/app-release.apk "$APK"
+          gh release create "${{ github.ref_name }}" "$APK" \
+            --title "موجّه الصوت ${{ github.ref_name }}" \
+            --notes-file RELEASE_NOTES.md

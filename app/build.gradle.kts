@@ -12,8 +12,8 @@ android {
         minSdk = 31
         // 34 on purpose: avoids forced edge-to-edge layout on Android 15+/16
         targetSdk = 34
-        versionCode = 1
-        versionName = "0.1.0"
+        versionCode = 2
+        versionName = "1.0.0"
     }
 
     // A fixed keystore, so every build has the same signature and can be installed over the previous one.
