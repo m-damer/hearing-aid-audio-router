@@ -21,10 +21,7 @@ class SystemReceiver : BroadcastReceiver() {
                         // Shizuku never survives a reboot without root, so the realistic outcome here is a reminder.
                         if (Router.awaitBinder(4000)) Router.applyAll(app) else Notifier.remindStartShizuku(app)
                     }
-                    BluetoothDevice.ACTION_ACL_CONNECTED -> {
-                        Thread.sleep(2500) // let the hearing aid register as an audio output first
-                        if (Router.awaitBinder(3000)) Router.applyAll(app)
-                    }
+                    BluetoothDevice.ACTION_ACL_CONNECTED -> onBluetoothConnected(app, intent)
                 }
             } catch (_: Throwable) {
             } finally {
@@ -32,6 +29,25 @@ class SystemReceiver : BroadcastReceiver() {
             }
         }.start()
     }
+}
+
+private fun onBluetoothConnected(app: Context, intent: Intent) {
+    @Suppress("DEPRECATION")
+    val dev: BluetoothDevice? = intent.getParcelableExtra(BluetoothDevice.EXTRA_DEVICE)
+    val before = Router.hearingDevices(app)
+    // The hearing aid is already connected and this event is about some other device: do nothing.
+    if (before.isNotEmpty() && before.none { it.address.equals(dev?.address, ignoreCase = true) }) return
+
+    // The hearing aid registers as an audio output a few seconds after the Bluetooth link comes up.
+    var waited = 0
+    while (waited < 8000 && Router.hearingDevices(app).isEmpty()) {
+        Thread.sleep(500)
+        waited += 500
+    }
+    if (Router.hearingDevices(app).isEmpty()) return // some other Bluetooth device connected
+
+    if (Router.awaitBinder(1500)) Router.applyAll(app)
+    if (Prefs.volumeEnabled(app)) Volume.applyStart(app)
 }
 
 object Notifier {

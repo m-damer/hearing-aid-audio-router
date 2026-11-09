@@ -10,6 +10,7 @@ import android.os.Bundle
 import android.view.View
 import android.widget.LinearLayout
 import android.widget.ScrollView
+import android.widget.SeekBar
 import android.widget.Switch
 import android.widget.TextView
 import android.widget.Toast
@@ -19,6 +20,8 @@ class MainActivity : Activity() {
 
     private lateinit var statusText: TextView
     private lateinit var hearingText: TextView
+    private lateinit var volLabel: TextView
+    private lateinit var volSeek: SeekBar
     private lateinit var routeSwitch: Switch
     private lateinit var routeSub: TextView
     private lateinit var logText: TextView
@@ -84,6 +87,48 @@ class MainActivity : Activity() {
 
         root.addView(Ui.card(this, routeSwitch, routeSub))
 
+        // --- starting volume ---
+        val volEnabled = Switch(this).apply {
+            text = "ضبط مستوى الصوت عند اتصال السماعة"
+            textSize = 16f
+            isChecked = Prefs.volumeEnabled(this@MainActivity)
+            setOnCheckedChangeListener { _, checked -> Prefs.setVolumeEnabled(this@MainActivity, checked) }
+        }
+        volLabel = Ui.text(this, "", 14f, color = Ui.MUTED)
+        volSeek = SeekBar(this).apply {
+            max = 100
+            progress = Prefs.startVolume(this@MainActivity)
+            setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
+                override fun onProgressChanged(seekBar: SeekBar?, p: Int, fromUser: Boolean) {
+                    if (fromUser) Prefs.setStartVolume(this@MainActivity, p)
+                    updateVolLabel()
+                }
+
+                override fun onStartTrackingTouch(seekBar: SeekBar?) {}
+                override fun onStopTrackingTouch(seekBar: SeekBar?) {}
+            })
+        }
+        root.addView(
+            Ui.card(
+                this,
+                volEnabled,
+                volLabel,
+                volSeek,
+                Ui.gap(this),
+                Ui.button(this, "تطبيق هذا المستوى الآن") {
+                    Volume.applyStart(this)
+                    Toast.makeText(this, "ضُبط مستوى الصوت", Toast.LENGTH_SHORT).show()
+                },
+                Ui.button(this, "حفظ مستوى الصوت الحالي كمستوى بدء") {
+                    val p = Volume.currentMusicPercent(this)
+                    Prefs.setStartVolume(this, p)
+                    volSeek.progress = p
+                    updateVolLabel()
+                }
+            )
+        )
+        updateVolLabel()
+
         root.addView(
             Ui.card(
                 this,
@@ -132,6 +177,10 @@ class MainActivity : Activity() {
         Shizuku.removeBinderDeadListener(deadListener)
         Shizuku.removeRequestPermissionResultListener(permListener)
         super.onDestroy()
+    }
+
+    private fun updateVolLabel() {
+        volLabel.text = "مستوى البدء: ${Prefs.startVolume(this)}٪ (يُضبط تلقائياً كلما اتصلت السماعة)"
     }
 
     private fun updateLabels() {
