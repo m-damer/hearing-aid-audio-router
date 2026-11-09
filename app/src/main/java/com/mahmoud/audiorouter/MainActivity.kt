@@ -2,6 +2,11 @@ package com.mahmoud.audiorouter
 
 import android.Manifest
 import android.app.Activity
+import android.app.AlertDialog
+import android.net.Uri
+import android.provider.Settings
+import android.widget.Button
+import android.widget.EditText
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Intent
@@ -20,6 +25,9 @@ class MainActivity : Activity() {
 
     private lateinit var statusText: TextView
     private lateinit var hearingText: TextView
+    private lateinit var updateStatus: TextView
+    private lateinit var installBtn: Button
+    private var pendingRelease: Updater.ReleaseInfo? = null
     private lateinit var volLabel: TextView
     private lateinit var volSeek: SeekBar
     private lateinit var routeSwitch: Switch
@@ -158,13 +166,25 @@ class MainActivity : Activity() {
 
         updateLabels()
 
-        val version = try {
-            packageManager.getPackageInfo(packageName, 0).versionName
-        } catch (_: Throwable) {
-            ""
+        // --- updates ---
+        updateStatus = Ui.text(this, "الإصدار الحالي: ${currentVersion()}", 14f, color = Ui.MUTED)
+        installBtn = Ui.button(this, "تنزيل وتثبيت التحديث") { downloadAndInstall() }.apply {
+            visibility = View.GONE
         }
         root.addView(
-            Ui.text(this, "موجّه الصوت · الإصدار $version", 12f, color = Ui.MUTED).apply {
+            Ui.card(
+                this,
+                Ui.text(this, "التحديثات", 16f, true),
+                updateStatus,
+                Ui.gap(this),
+                Ui.button(this, "تحقق من التحديثات") { checkUpdates() },
+                installBtn,
+                Ui.button(this, "إعداد رمز GitHub (مرة واحدة)") { tokenDialog() }
+            )
+        )
+
+        root.addView(
+            Ui.text(this, "موجّه الصوت · الإصدار ${currentVersion()}", 12f, color = Ui.MUTED).apply {
                 setPadding(0, Ui.dp(this@MainActivity, 16), 0, 0)
             }
         )
@@ -188,6 +208,90 @@ class MainActivity : Activity() {
         Shizuku.removeBinderDeadListener(deadListener)
         Shizuku.removeRequestPermissionResultListener(permListener)
         super.onDestroy()
+    }
+
+    private fun currentVersion(): String = try {
+        packageManager.getPackageInfo(packageName, 0).versionName ?: ""
+    } catch (_: Throwable) {
+        ""
+    }
+
+    private fun tokenDialog() {
+        val input = EditText(this).apply {
+            hint = "الصق الرمز هنا (github_pat_...)"
+            setSingleLine()
+            setText(Prefs.token(this@MainActivity))
+        }
+        AlertDialog.Builder(this)
+            .setTitle("رمز الوصول لمستودع GitHub")
+            .setMessage(
+                "المستودع خاص، فيحتاج التطبيق رمزاً للقراءة فقط.\n\n" +
+                    "أنشئه من صفحة «فتح صفحة إنشاء الرمز»: اختر المستودع hearing-aid-audio-router فقط، " +
+                    "ومن الصلاحيات: Contents ← Read-only. ثم الصق الرمز هنا."
+            )
+            .setView(input)
+            .setPositiveButton("حفظ") { _, _ ->
+                Prefs.setToken(this, input.text.toString())
+                Toast.makeText(this, "حُفظ الرمز", Toast.LENGTH_SHORT).show()
+            }
+            .setNeutralButton("فتح صفحة إنشاء الرمز") { _, _ ->
+                startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("https://github.com/settings/personal-access-tokens/new")))
+            }
+            .setNegativeButton("إلغاء", null)
+            .show()
+    }
+
+    private fun checkUpdates() {
+        val token = Prefs.token(this)
+        if (token.isBlank()) {
+            tokenDialog()
+            return
+        }
+        updateStatus.text = "جارٍ التحقق..."
+        Thread {
+            try {
+                val info = Updater.fetchLatest(token)
+                val local = currentVersion()
+                runOnUiThread {
+                    if (Updater.isNewer(info.tag, local)) {
+                        pendingRelease = info
+                        updateStatus.text = "يتوفر تحديث ${info.tag}\n" + info.notes.take(400)
+                        installBtn.visibility = View.VISIBLE
+                    } else {
+                        pendingRelease = null
+                        installBtn.visibility = View.GONE
+                        updateStatus.text = "أنت على أحدث إصدار ($local)"
+                    }
+                }
+            } catch (t: Throwable) {
+                runOnUiThread { updateStatus.text = "تعذّر التحقق: ${t.message}" }
+            }
+        }.start()
+    }
+
+    private fun downloadAndInstall() {
+        val info = pendingRelease ?: return
+        if (!packageManager.canRequestPackageInstalls()) {
+            Toast.makeText(this, "اسمح بتثبيت التطبيقات من موجّه الصوت، ثم ارجع واضغط مرة أخرى", Toast.LENGTH_LONG).show()
+            startActivity(Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES, Uri.parse("package:$packageName")))
+            return
+        }
+        val app = applicationContext
+        val token = Prefs.token(this)
+        installBtn.isEnabled = false
+        Thread {
+            try {
+                val file = Updater.download(app, token, info) { p ->
+                    runOnUiThread { updateStatus.text = "جارٍ التنزيل... $p٪" }
+                }
+                runOnUiThread { updateStatus.text = "جارٍ التثبيت، أكّد الطلب الذي سيظهر" }
+                Updater.install(app, file)
+            } catch (t: Throwable) {
+                runOnUiThread { updateStatus.text = "فشل التحديث: ${t.message}" }
+            } finally {
+                runOnUiThread { installBtn.isEnabled = true }
+            }
+        }.start()
     }
 
     private fun updateVolLabel() {

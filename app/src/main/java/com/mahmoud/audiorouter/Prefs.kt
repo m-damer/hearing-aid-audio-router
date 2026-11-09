@@ -18,6 +18,10 @@ object Prefs {
     fun startVolume(c: Context) = sp(c).getInt("vol_start", 50)
     fun setStartVolume(c: Context, v: Int) = sp(c).edit().putInt("vol_start", v.coerceIn(0, 100)).apply()
 
+    /** Read-only GitHub token used to fetch updates from the private repository. */
+    fun token(c: Context): String = sp(c).getString("gh_token", "") ?: ""
+    fun setToken(c: Context, v: String) = sp(c).edit().putString("gh_token", v.trim()).apply()
+
     /** The last apply result, so the diagnostics report can include it. */
     fun lastLog(c: Context): String = sp(c).getString("last_log", "") ?: ""
     fun setLastLog(c: Context, v: String) = sp(c).edit().putString("last_log", v).apply()
