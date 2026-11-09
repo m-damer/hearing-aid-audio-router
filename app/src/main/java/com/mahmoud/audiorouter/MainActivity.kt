@@ -19,10 +19,8 @@ class MainActivity : Activity() {
 
     private lateinit var statusText: TextView
     private lateinit var hearingText: TextView
-    private lateinit var mediaSwitch: Switch
-    private lateinit var callSwitch: Switch
-    private lateinit var mediaSub: TextView
-    private lateinit var callSub: TextView
+    private lateinit var routeSwitch: Switch
+    private lateinit var routeSub: TextView
     private lateinit var logText: TextView
 
     private val binderListener = Shizuku.OnBinderReceivedListener { runOnUiThread { refresh() } }
@@ -72,32 +70,19 @@ class MainActivity : Activity() {
         )
 
         // --- routes ---
-        mediaSwitch = Switch(this).apply {
-            text = "الوسائط: موسيقى، فيديو، بث"
-            textSize = 16f
-            isChecked = Prefs.mediaToHearing(this@MainActivity)
+        routeSwitch = Switch(this).apply {
+            text = "تحويل الصوت إلى السماعة الطبية"
+            textSize = 17f
+            isChecked = Prefs.toHearing(this@MainActivity)
             setOnCheckedChangeListener { _, checked ->
-                Prefs.setMediaToHearing(this@MainActivity, checked)
+                Prefs.setToHearing(this@MainActivity, checked)
                 updateLabels()
                 applyAsync()
             }
         }
-        mediaSub = Ui.text(this, "", 13f, color = Ui.MUTED)
+        routeSub = Ui.text(this, "", 13f, color = Ui.MUTED)
 
-        callSwitch = Switch(this).apply {
-            text = "المكالمات والرسائل الصوتية"
-            textSize = 16f
-            isChecked = Prefs.callToHearing(this@MainActivity)
-            setOnCheckedChangeListener { _, checked ->
-                Prefs.setCallToHearing(this@MainActivity, checked)
-                updateLabels()
-                applyAsync()
-            }
-        }
-        callSub = Ui.text(this, "", 13f, color = Ui.MUTED)
-
-        root.addView(Ui.card(this, mediaSwitch, mediaSub))
-        root.addView(Ui.card(this, callSwitch, callSub))
+        root.addView(Ui.card(this, routeSwitch, routeSub))
 
         root.addView(
             Ui.card(
@@ -150,8 +135,10 @@ class MainActivity : Activity() {
     }
 
     private fun updateLabels() {
-        mediaSub.text = "الآن: " + if (Prefs.mediaToHearing(this)) "السماعة الطبية" else "مكبر الجوال"
-        callSub.text = "الآن: " + if (Prefs.callToHearing(this)) "السماعة الطبية" else "سماعة الأذن في الجوال"
+        routeSub.text = if (Prefs.toHearing(this))
+            "مفعّل: المكالمات والرسائل الصوتية والوسائط (موسيقى، فيديو، بث) تخرج من السماعة الطبية."
+        else
+            "متوقف: كل الأصوات تخرج من الجوال."
     }
 
     private fun shizukuInstalled(): Boolean = try {

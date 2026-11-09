@@ -145,18 +145,20 @@ object Router {
 
     // ---------- Rules ----------
 
-    private class Rule(val label: String, val usage: Int, val target: Target)
+    /** primary = the sounds the switch controls (media, calls). They win if a strategy is shared with other sounds. */
+    private class Rule(val label: String, val usage: Int, val target: Target, val primary: Boolean)
 
     private fun rules(ctx: Context): List<Rule> {
-        val media = if (Prefs.mediaToHearing(ctx)) Target.HEARING else Target.SPEAKER
-        val call = if (Prefs.callToHearing(ctx)) Target.HEARING else Target.EARPIECE
+        val hearing = Prefs.toHearing(ctx)
+        val media = if (hearing) Target.HEARING else Target.SPEAKER
+        val call = if (hearing) Target.HEARING else Target.EARPIECE
         return listOf(
-            Rule("الوسائط", AudioAttributes.USAGE_MEDIA, media),
-            Rule("المكالمات", AudioAttributes.USAGE_VOICE_COMMUNICATION, call),
-            Rule("نغمة الرنين", AudioAttributes.USAGE_NOTIFICATION_RINGTONE, Target.SPEAKER),
-            Rule("المنبهات", AudioAttributes.USAGE_ALARM, Target.SPEAKER),
-            Rule("الإشعارات", AudioAttributes.USAGE_NOTIFICATION, Target.SPEAKER),
-            Rule("أصوات النظام", AudioAttributes.USAGE_ASSISTANCE_SONIFICATION, Target.SPEAKER)
+            Rule("الوسائط", AudioAttributes.USAGE_MEDIA, media, true),
+            Rule("المكالمات", AudioAttributes.USAGE_VOICE_COMMUNICATION, call, true),
+            Rule("نغمة الرنين", AudioAttributes.USAGE_NOTIFICATION_RINGTONE, Target.SPEAKER, false),
+            Rule("المنبهات", AudioAttributes.USAGE_ALARM, Target.SPEAKER, false),
+            Rule("الإشعارات", AudioAttributes.USAGE_NOTIFICATION, Target.SPEAKER, false),
+            Rule("أصوات النظام", AudioAttributes.USAGE_ASSISTANCE_SONIFICATION, Target.SPEAKER, false)
         )
     }
 
@@ -179,8 +181,10 @@ object Router {
             val speaker = attrs(TYPE_SPEAKER, "")
             val earpiece = attrs(TYPE_EARPIECE, "")
 
-            // One strategy can serve several usages (ringtone + alarm). Phone-side targets win over hearing aid.
-            val perStrategy = LinkedHashMap<Int, Pair<String, Target>>()
+            // One strategy can serve several usages (ringtone + alarm, or even media + system sounds).
+            // The sounds the switch controls (media, calls) win, so they can never be forced to the speaker
+            // by an unrelated sound sharing their strategy.
+            val perStrategy = LinkedHashMap<Int, Triple<String, Target, Boolean>>()
             for (rule in rules(ctx)) {
                 val s = strategyFor(rule.usage)
                 if (s == null) {
@@ -188,14 +192,18 @@ object Router {
                     continue
                 }
                 val id = strategyId(s)
+                r.line("  ${rule.label} ← مسار ${strategyName(s)} ($id)")
                 val old = perStrategy[id]
-                if (old == null || (old.second == Target.HEARING && rule.target != Target.HEARING)) {
-                    perStrategy[id] = Pair(rule.label, rule.target)
+                if (old == null || (rule.primary && !old.third)) {
+                    if (old != null) r.line("  ملاحظة: «${old.first}» تشترك في المسار نفسه فتتبع «${rule.label}»")
+                    perStrategy[id] = Triple(rule.label, rule.target, rule.primary)
+                } else if (old.third && !rule.primary) {
+                    r.line("  ملاحظة: «${rule.label}» تشترك في المسار نفسه فتتبع «${old.first}»")
                 }
             }
 
-            for ((id, pair) in perStrategy) {
-                val (label, target) = pair
+            for ((id, entry) in perStrategy) {
+                val (label, target, _) = entry
                 try {
                     val status = when {
                         target == Target.HEARING && hearingAttrs.isEmpty() -> {
